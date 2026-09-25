@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mallorca 70.3 — Training Readout</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg-2: #121a23;
+    --surface: #161f2a;
+    --line: #263241;
+    --text: #e7edf3;
+    --text-dim: #93a3b5;
+    --accent: #35d0a8;
+    --accent-soft: rgba(53,208,168,0.14);
+    --amber: #f2b134;
+    --amber-soft: rgba(242,177,52,0.14);
+    --red: #ef6a6a;
+    --swim: #4fb3e8;
+    --bike: #f2b134;
+    --run: #35d0a8;
+    --other: #6b7a8d;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f4f6f8;
+      --bg-2: #eef1f4;
+      --surface: #ffffff;
+      --line: #dbe2e9;
+      --text: #131a22;
+      --text-dim: #5b6b7c;
+      --accent-soft: rgba(20,150,120,0.10);
+      --amber-soft: rgba(184,127,10,0.12);
+    }
+  }
+  :root[data-theme="dark"] { }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100%;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; }
+
+  header.top {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 20px;
+    margin-bottom: 24px;
+  }
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    letter-spacing: 0.02em;
+  }
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 27px;
+    margin: 4px 0 0;
+    letter-spacing: -0.01em;
+  }
+  .race-block { text-align: right; }
+  .race-days {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 40px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .race-sub { font-size: 12.5px; color: var(--text-dim); margin-top: 4px; }
+
+  .status-line {
+    font-size: 14.5px;
+    color: var(--text-dim);
+    margin-bottom: 22px;
+    line-height: 1.55;
+  }
+  .status-line strong { color: var(--text); font-weight: 600; }
+
+  .coach-note {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--text-dim);
+    background: var(--surface);
+    padding: 14px 16px;
+    margin-bottom: 20px;
+  }
+  .coach-note.green { border-left-color: var(--accent); }
+  .coach-note.amber { border-left-color: var(--amber); }
+  .coach-note.red { border-left-color: var(--red); }
+  .coach-note .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    margin-top: 5px; flex: 0 0 auto;
+    background: var(--text-dim);
+  }
+  .coach-note.green .dot { background: var(--accent); }
+  .coach-note.amber .dot { background: var(--amber); }
+  .coach-note.red .dot { background: var(--red); }
+  .coach-note .eyebrow { margin-bottom: 2px; }
+  .coach-note h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 15.5px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+  .coach-note p { font-size: 13.5px; color: var(--text-dim); margin: 0; line-height: 1.5; }
+
+  .mini-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 720px) { .mini-grid { grid-template-columns: 1fr; } }
+
+  .mini-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+  .mini-stat .label { font-size: 11px; color: var(--text-dim); }
+  .mini-stat .value { font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 600; margin-top: 2px; }
+  .mini-stat .delta { font-size: 11px; margin-top: 1px; }
+
+  .pill {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 2px 8px;
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+  }
+  .pill.low, .pill.sweet_spot { border-color: var(--accent); color: var(--accent); }
+  .pill.high { border-color: var(--amber); color: var(--amber); }
+  .pill.very_high { border-color: var(--red); color: var(--red); }
+
+  table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.data-table th {
+    text-align: left; font-weight: 500; color: var(--text-dim);
+    font-size: 11px; padding: 6px 8px; border-bottom: 1px solid var(--line);
+  }
+  table.data-table td { padding: 7px 8px; border-bottom: 1px solid var(--line); }
+  table.data-table tbody tr:last-child td { border-bottom: none; }
+  .scroll-x { overflow-x: auto; }
+
+  .zone-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 6px; }
+  .zone-table th { text-align: left; color: var(--text-dim); font-size: 11px; padding: 4px 6px; }
+  .zone-table td { padding: 4px 6px; font-family: 'IBM Plex Mono', monospace; }
+  .threshold-note { font-size: 11.5px; color: var(--text-dim); margin-top: 10px; }
+
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    margin-bottom: 26px;
+  }
+  .stat {
+    background: var(--surface);
+    padding: 14px 16px;
+  }
+  .stat .label { font-size: 11.5px; color: var(--text-dim); text-transform: none; }
+  .stat .value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 22px;
+    font-weight: 600;
+    margin-top: 3px;
+  }
+  .stat .delta { font-size: 11.5px; margin-top: 2px; color: var(--text-dim); }
+  .up { color: var(--accent); }
+  .down { color: var(--red); }
+  .flat { color: var(--amber); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .grid .full { grid-column: 1 / -1; }
+  @media (max-width: 720px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .updated-badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  @media (max-width: 480px) {
+    .wrap { padding: 18px 14px 44px; }
+    h1 { font-size: 21px; }
+    .race-days { font-size: 30px; }
+    .stat-row { grid-template-columns: repeat(2, 1fr); }
+    .stat .value { font-size: 19px; }
+    .card { padding: 14px 14px 10px; }
+    .chart-holder { height: 200px; }
+    .chart-holder.tall { height: 230px; }
+    .status-line { font-size: 13.5px; }
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    padding: 18px 18px 12px;
+  }
+  .card h2 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 2px;
+  }
+  .card .sub {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+  .chart-holder { position: relative; height: 230px; }
+  .chart-holder.tall { height: 280px; }
+
+  .legend-note {
+    font-size: 11.5px;
+    color: var(--text-dim);
+    margin-top: 8px;
+  }
+
+  footer {
+    margin-top: 32px;
+    font-size: 12px;
+    color: var(--text-dim);
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+
+  a.reload-note { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <div class="eyebrow">TRAINING READOUT · GARMIN + STRAVA</div>
+      <h1>Mallorca 70.3 build</h1>
+    </div>
+    <div class="race-block">
+      <div class="race-days" id="raceDays">—</div>
+      <div class="race-sub" id="raceSub">days to Ironman 70.3 Mallorca</div>
+      <div class="updated-badge" id="updatedBadge"></div>
+    </div>
+  </header>
+
+  <div class="coach-note" id="coachNote">
+    <div class="dot"></div>
+    <div>
+      <div class="eyebrow">TODAY'S CALL</div>
+      <h3 id="coachHeadline">—</h3>
+      <p id="coachDetail"></p>
+    </div>
+  </div>
+
+  <div class="status-line" id="statusLine">Loading…</div>
+
+  <div class="stat-row" id="statRow"></div>
+
+  <div class="mini-grid">
+    <div class="card">
+      <h2>This week vs. last week</h2>
+      <div class="sub">Strava, rolling 7 days</div>
+      <div class="mini-stats" id="weeklyRollingStats"></div>
+    </div>
+    <div class="card">
+      <h2>Load balance</h2>
+      <div class="sub">ACWR (7d:28d) · Monotony · Strain — same load-management math TrainingPeaks' PMC and most readiness apps use</div>
+      <div class="mini-stats" id="loadBalanceStats"></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card full">
+      <h2>Fitness, fatigue, form</h2>
+      <div class="sub">CTL (fitness) vs. ATL (fatigue) vs. TSB (form) — last 5 months, modeled from Strava training load</div>
+      <div class="chart-holder tall"><canvas id="chartFitness"></canvas></div>
+      <div class="legend-note">Negative TSB means you're digging out of a hole faster than you're filling it back in — normal in a build phase, worth watching into taper.</div>
+    </div>
+
+    <div class="card">
+      <h2>Weekly hours by discipline</h2>
+      <div class="sub">Strava, last 15 weeks</div>
+      <div class="chart-holder"><canvas id="chartHours"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Running VO2max trend</h2>
+      <div class="sub">Garmin, last 8 weeks</div>
+      <div class="chart-holder"><canvas id="chartVo2"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>HRV (weekly avg) vs. resting HR</h2>
+      <div class="sub">Garmin, last 55 days</div>
+      <div class="chart-holder"><canvas id="chartHrv"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Sleep score vs. training readiness</h2>
+      <div class="sub">Garmin, last 55 days</div>
+      <div class="chart-holder"><canvas id="chartSleep"></canvas></div>
+    </div>
+
+    <div class="card full">
+      <h2>Body Battery range</h2>
+      <div class="sub">Daily high/low, last 55 days — the gap is roughly how much of your tank a day actually drains</div>
+      <div class="chart-holder"><canvas id="chartBB"></canvas></div>
+    </div>
+
+    <div class="card full">
+      <h2>Recent activity</h2>
+      <div class="sub">Strava, last 12 sessions</div>
+      <div class="scroll-x">
+        <table class="data-table" id="activityTable">
+          <thead><tr><th>Date</th><th>Activity</th><th>Sport</th><th>Duration</th><th>Distance</th><th>Avg HR</th><th>Avg power</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Run pace trend</h2>
+      <div class="sub">min/mi, last 30 runs — line rising = getting faster</div>
+      <div class="chart-holder"><canvas id="chartPaceRun"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Swim pace trend</h2>
+      <div class="sub">min/100yd, last 30 swims — line rising = getting faster</div>
+      <div class="chart-holder"><canvas id="chartPaceSwim"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Aerobic efficiency — bike</h2>
+      <div class="sub">Avg heart rate vs. avg power per ride — drifting up/left over time is the fitness signal</div>
+      <div class="chart-holder"><canvas id="chartAeroBike"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Aerobic efficiency — run</h2>
+      <div class="sub">Avg heart rate vs. pace per run — drifting down/left is the fitness signal</div>
+      <div class="chart-holder"><canvas id="chartAeroRun"></canvas></div>
+    </div>
+
+    <div class="card full">
+      <h2>Performance thresholds & zones</h2>
+      <div class="sub">Set from your stated FTP/threshold pace/LTHR — not auto-detected. Edit the env vars in refresh_dashboard.py to change these.</div>
+      <div class="scroll-x" style="display:flex; gap:28px; flex-wrap:wrap;">
+        <div>
+          <strong style="font-size:12.5px;">Power zones (FTP <span id="ftpVal"></span>W)</strong>
+          <table class="zone-table" id="powerZoneTable"></table>
+        </div>
+        <div>
+          <strong style="font-size:12.5px;">Run HR zones (LTHR <span id="lthrRunVal"></span>)</strong>
+          <table class="zone-table" id="hrZoneRunTable"></table>
+        </div>
+        <div>
+          <strong style="font-size:12.5px;">Bike HR zones (LTHR <span id="lthrBikeVal"></span>)</strong>
+          <table class="zone-table" id="hrZoneBikeTable"></table>
+        </div>
+      </div>
+      <div class="threshold-note" id="thresholdNote"></div>
+    </div>
+
+    <div class="card full">
+      <h2>Calories</h2>
+      <div class="sub">Garmin, last 7 days — total / active / resting (BMR)</div>
+      <div class="chart-holder"><canvas id="chartCalories"></canvas></div>
+    </div>
+  </div>
+
+  <footer>
+    Refreshed automatically from Garmin Connect and Strava. Fitness/fatigue/form is modeled here from Strava's Relative Effort per activity (standard 42-day/7-day exponentially-weighted load, same math TrainingPeaks and intervals.icu use) rather than pulled from TrainingPeaks directly, so it will track closely but not match exactly. Any single activity longer than 4 hours is capped before it feeds the weekly-hours and load charts, to stop a forgotten stopped watch from skewing a week.
+  </footer>
+
+</div>
+
+<script>
+const DATA = __DATA_JSON__;
+
+function fmtWeek(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+// ---- theme-aware chart colors ----
+const isDark = () => {
+  const attr = document.documentElement.getAttribute('data-theme');
+  if (attr === 'light') return false;
+  if (attr === 'dark') return true;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+};
+const gridColor = () => isDark() ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+const tickColor = () => isDark() ? '#93a3b5' : '#5b6b7c';
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+Chart.defaults.font.size = 11;
+
+const COLORS = {
+  ctl: '#35d0a8', atl: '#f2b134', tsb: '#4fb3e8',
+  swim: '#4fb3e8', bike: '#f2b134', run: '#35d0a8', other: '#6b7a8d',
+  hrv: '#35d0a8', rhr: '#ef6a6a',
+  sleep: '#4fb3e8', readiness: '#35d0a8',
+  bb: '#f2b134'
+};
+
+function baseScales(extra) {
+  return Object.assign({
+    x: { grid: { color: gridColor() }, ticks: { color: tickColor(), maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
+    y: { grid: { color: gridColor() }, ticks: { color: tickColor() } }
+  }, extra || {});
+}
+
+// ---- Header stats ----
+document.getElementById('raceDays').textContent = DATA.race.daysOut;
+document.getElementById('raceSub').textContent = `days to ${DATA.race.name} (${DATA.race.date}) · ~${DATA.race.weeksOut} weeks`;
+document.getElementById('updatedBadge').textContent = `updated ${DATA.generatedAt}`;
+
+if (DATA.coachNote) {
+  const cn = DATA.coachNote;
+  const el = document.getElementById('coachNote');
+  el.classList.add(cn.flag || 'flat');
+  document.getElementById('coachHeadline').textContent = cn.headline || '';
+  document.getElementById('coachDetail').textContent = cn.detail || '';
+}
+
+const cf = DATA.currentFitness;
+const lastG = DATA.garminDaily[DATA.garminDaily.length - 1];
+const lastVo2 = DATA.vo2max[DATA.vo2max.length - 1].value;
+const firstVo2 = DATA.vo2max[0].value;
+
+document.getElementById('statusLine').innerHTML =
+  `Current form (TSB) is <strong>${cf.tsb}</strong> — <strong>${cf.fitness_status}</strong>. ` +
+  `Fitness (CTL) is <strong>${cf.ctl}</strong>, up from a taper dip in early July, while running VO2max has climbed from ` +
+  `<strong>${firstVo2}</strong> to <strong>${lastVo2}</strong> over the same stretch. Readiness has been choppy this week — worth a genuinely easy day if it stays low.`;
+
+const statRow = document.getElementById('statRow');
+const stats = [
+  { label: 'Fitness (CTL)', value: cf.ctl.toFixed(1) },
+  { label: 'Fatigue (ATL)', value: cf.atl.toFixed(1) },
+  { label: 'Form (TSB)', value: cf.tsb.toFixed(1), cls: cf.tsb < -10 ? 'down' : (cf.tsb > 5 ? 'up' : 'flat') },
+  { label: 'Readiness today', value: lastG.readiness, cls: lastG.readiness < 40 ? 'down' : (lastG.readiness > 65 ? 'up' : 'flat') },
+  { label: 'Resting HR', value: lastG.restingHR + ' bpm' },
+  { label: 'HRV (7d avg)', value: lastG.hrvWeekly + ' ms' },
+  { label: 'VO2max (run)', value: lastVo2, cls: 'up' },
+  { label: 'Sleep score', value: lastG.sleepScore ?? '—' },
+];
+statRow.innerHTML = stats.map(s => `
+  <div class="stat">
+    <div class="label">${s.label}</div>
+    <div class="value">${s.value}</div>
+  </div>
+`).join('');
+
+// ---- Fitness / Fatigue / Form ----
+new Chart(document.getElementById('chartFitness'), {
+  type: 'line',
+  data: {
+    labels: DATA.tpWeekly.map(w => fmtWeek(w.week)),
+    datasets: [
+      { label: 'CTL (fitness)', data: DATA.tpWeekly.map(w => w.ctl), borderColor: COLORS.ctl, backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, borderWidth: 2 },
+      { label: 'ATL (fatigue)', data: DATA.tpWeekly.map(w => w.atl), borderColor: COLORS.atl, backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, borderWidth: 2 },
+      { label: 'TSB (form)', data: DATA.tpWeekly.map(w => w.tsb), borderColor: COLORS.tsb, backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, borderWidth: 2, borderDash: [4,3] },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'top', labels: { color: tickColor(), boxWidth: 10 } } },
+    scales: baseScales()
+  }
+});
+
+// ---- Weekly hours by sport ----
+new Chart(document.getElementById('chartHours'), {
+  type: 'bar',
+  data: {
+    labels: DATA.weeklyHours.map(w => fmtWeek(w.week)),
+    datasets: [
+      { label: 'Swim', data: DATA.weeklyHours.map(w => w.Swim), backgroundColor: COLORS.swim, stack: 's' },
+      { label: 'Bike', data: DATA.weeklyHours.map(w => w.Bike), backgroundColor: COLORS.bike, stack: 's' },
+      { label: 'Run', data: DATA.weeklyHours.map(w => w.Run), backgroundColor: COLORS.run, stack: 's' },
+      { label: 'Other', data: DATA.weeklyHours.map(w => w.Other), backgroundColor: COLORS.other, stack: 's' },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'top', labels: { color: tickColor(), boxWidth: 10 } } },
+    scales: baseScales({
+      x: { stacked: true, grid: { display: false }, ticks: { color: tickColor(), maxTicksLimit: 6 } },
+      y: { stacked: true, grid: { color: gridColor() }, ticks: { color: tickColor() }, title: { display: true, text: 'hours', color: tickColor() } }
+    })
+  }
+});
+
+// ---- VO2max ----
+new Chart(document.getElementById('chartVo2'), {
+  type: 'line',
+  data: {
+    labels: DATA.vo2max.map(v => fmtWeek(v.date)),
+    datasets: [{ label: 'VO2max (run)', data: DATA.vo2max.map(v => v.value), borderColor: COLORS.ctl, backgroundColor: 'rgba(53,208,168,0.12)', fill: true, tension: 0.25, pointRadius: 2, borderWidth: 2 }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: baseScales({ y: { grid: { color: gridColor() }, ticks: { color: tickColor() }, suggestedMin: 45 } })
+  }
+});
+
+// ---- HRV vs Resting HR ----
+new Chart(document.getElementById('chartHrv'), {
+  type: 'line',
+  data: {
+    labels: DATA.garminDaily.map(d => fmtWeek(d.date)),
+    datasets: [
+      { label: 'HRV (7d avg, ms)', data: DATA.garminDaily.map(d => d.hrvWeekly), borderColor: COLORS.hrv, backgroundColor: 'transparent', yAxisID: 'y', tension: 0.25, pointRadius: 0, borderWidth: 2 },
+      { label: 'Resting HR (bpm)', data: DATA.garminDaily.map(d => d.restingHR), borderColor: COLORS.rhr, backgroundColor: 'transparent', yAxisID: 'y1', tension: 0.25, pointRadius: 0, borderWidth: 2 },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'top', labels: { color: tickColor(), boxWidth: 10 } } },
+    scales: {
+      x: { grid: { color: gridColor() }, ticks: { color: tickColor(), maxTicksLimit: 8 } },
+      y: { position: 'left', grid: { color: gridColor() }, ticks: { color: tickColor() }, title: { display: true, text: 'HRV (ms)', color: tickColor() } },
+      y1: { position: 'right', grid: { display: false }, ticks: { color: tickColor() }, title: { display: true, text: 'RHR (bpm)', color: tickColor() } }
+    }
+  }
+});
+
+// ---- Sleep vs Readiness ----
+new Chart(document.getElementById('chartSleep'), {
+  type: 'bar',
+  data: {
+    labels: DATA.garminDaily.map(d => fmtWeek(d.date)),
+    datasets: [
+      { type: 'bar', label: 'Sleep score', data: DATA.garminDaily.map(d => d.sleepScore), backgroundColor: 'rgba(79,179,232,0.55)' },
+      { type: 'line', label: 'Readiness', data: DATA.garminDaily.map(d => d.readiness), borderColor: COLORS.readiness, backgroundColor: 'transparent', tension: 0.25, pointRadius: 0, borderWidth: 2 },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'top', labels: { color: tickColor(), boxWidth: 10 } } },
+    scales: baseScales({ x: { ticks: { color: tickColor(), maxTicksLimit: 8 } } })
+  }
+});
+
+// ---- Body Battery ----
+new Chart(document.getElementById('chartBB'), {
+  type: 'line',
+  data: {
+    labels: DATA.garminDaily.map(d => fmtWeek(d.date)),
+    datasets: [
+      { label: 'Daily high', data: DATA.garminDaily.map(d => d.bbHigh), borderColor: COLORS.bb, backgroundColor: 'rgba(242,177,52,0.10)', fill: '+1', tension: 0.2, pointRadius: 0, borderWidth: 1.5 },
+      { label: 'Daily low', data: DATA.garminDaily.map(d => d.bbLow), borderColor: '#6b7a8d', backgroundColor: 'transparent', fill: false, tension: 0.2, pointRadius: 0, borderWidth: 1.5 },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'top', labels: { color: tickColor(), boxWidth: 10 } } },
+    scales: baseScales({ y: { min: 0, max: 100, grid: { color: gridColor() }, ticks: { color: tickColor() } } })
+  }
+});
+
+// ---- Weekly rolling comparison ----
+function pctDelta(cur, prev) {
+  if (prev === null || prev === undefined || prev === 0 || cur === null || cur === undefined) return null;
+  return Math.round(((cur - prev) / prev) * 100);
+}
+function deltaClass(pct, higherIsBetter = true) {
+  if (pct === null) return 'flat';
+  if (pct === 0) return 'flat';
+  const good = higherIsBetter ? pct > 0 : pct < 0;
+  return good ? 'up' : 'down';
+}
+(function renderWeeklyRolling() {
+  const wr = DATA.weeklyRolling;
+  if (!wr) return;
+  const c = wr.current, p = wr.previous;
+  const rows = [
+    { label: 'Sessions', cur: c.sessions, prev: p.sessions, higherBetter: null },
+    { label: 'Volume (hrs)', cur: c.hours, prev: p.hours, higherBetter: null },
+    { label: 'Load', cur: c.load, prev: p.load, higherBetter: null },
+    { label: 'Distance (mi)', cur: c.distance_mi, prev: p.distance_mi, higherBetter: null },
+    { label: 'Avg pace (min/mi)', cur: c.avg_pace_min_per_mi, prev: p.avg_pace_min_per_mi, higherBetter: false },
+    { label: 'Avg HR', cur: c.avg_hr, prev: p.avg_hr, higherBetter: null },
+  ];
+  const el = document.getElementById('weeklyRollingStats');
+  el.innerHTML = rows.map(r => {
+    const pct = pctDelta(r.cur, r.prev);
+    const cls = r.higherBetter === null ? 'flat' : deltaClass(pct, r.higherBetter);
+    return `<div class="mini-stat">
+      <div class="label">${r.label}</div>
+      <div class="value">${r.cur ?? '—'}</div>
+      <div class="delta ${cls}">${pct === null ? '—' : (pct > 0 ? '+' : '') + pct + '%'}</div>
+    </div>`;
+  }).join('');
+})();
+
+// ---- Load balance ----
+(function renderLoadBalance() {
+  const lb = DATA.loadBalance;
+  if (!lb) return;
+  const el = document.getElementById('loadBalanceStats');
+  const flagLabel = { low: 'Low', sweet_spot: 'Sweet spot', high: 'High', very_high: 'Very high', unknown: '—' }[lb.flag] || lb.flag;
+  el.innerHTML = `
+    <div class="mini-stat">
+      <div class="label">ACWR</div>
+      <div class="value">${lb.acwr ?? '—'}</div>
+      <div class="delta"><span class="pill ${lb.flag}">${flagLabel}</span></div>
+    </div>
+    <div class="mini-stat">
+      <div class="label">Monotony</div>
+      <div class="value">${lb.monotony ?? '—'}</div>
+    </div>
+    <div class="mini-stat">
+      <div class="label">Weekly strain</div>
+      <div class="value">${lb.strain ?? '—'}</div>
+    </div>
+  `;
+})();
+
+// ---- Activity log ----
+(function renderActivityLog() {
+  const rows = DATA.activityLog || [];
+  const tbody = document.querySelector('#activityTable tbody');
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${fmtWeek(r.date)}</td>
+      <td>${r.name || ''}</td>
+      <td>${r.sport}</td>
+      <td>${r.duration_min}m</td>
+      <td>${r.distance_mi > 0 ? r.distance_mi + 'mi' : '—'}</td>
+      <td>${r.avg_hr ? Math.round(r.avg_hr) + 'bpm' : '—'}</td>
+      <td>${r.avg_watts ? Math.round(r.avg_watts) + 'W' : '—'}</td>
+    </tr>
+  `).join('');
+})();
+
+// ---- Pace trends (reversed axis: faster pace plots higher) ----
+function paceChart(canvasId, points, color) {
+  new Chart(document.getElementById(canvasId), {
+    type: 'line',
+    data: {
+      labels: points.map(p => fmtWeek(p.date)),
+      datasets: [{ data: points.map(p => p.value), borderColor: color, backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, borderWidth: 2 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: baseScales({ y: { reverse: true, grid: { color: gridColor() }, ticks: { color: tickColor() } } })
+    }
+  });
+}
+if (DATA.paceRun && DATA.paceRun.length) paceChart('chartPaceRun', DATA.paceRun, COLORS.run);
+if (DATA.paceSwim && DATA.paceSwim.length) paceChart('chartPaceSwim', DATA.paceSwim, COLORS.swim);
+
+// ---- Aerobic efficiency scatter ----
+function aeroChart(canvasId, points, color, yLabel, reverseY) {
+  new Chart(document.getElementById(canvasId), {
+    type: 'scatter',
+    data: { datasets: [{ data: points, backgroundColor: color, pointRadius: 3.5 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: gridColor() }, ticks: { color: tickColor() }, title: { display: true, text: 'Avg HR (bpm)', color: tickColor() } },
+        y: { reverse: !!reverseY, grid: { color: gridColor() }, ticks: { color: tickColor() }, title: { display: true, text: yLabel, color: tickColor() } }
+      }
+    }
+  });
+}
+if (DATA.aeroBike && DATA.aeroBike.length) aeroChart('chartAeroBike', DATA.aeroBike, COLORS.bike, 'Avg power (W)', false);
+if (DATA.aeroRun && DATA.aeroRun.length) aeroChart('chartAeroRun', DATA.aeroRun, COLORS.run, 'Pace (min/mi)', true);
+
+// ---- Thresholds & zones ----
+(function renderZones() {
+  const t = DATA.thresholds || {};
+  document.getElementById('ftpVal').textContent = t.ftp_watts ?? '—';
+  document.getElementById('lthrRunVal').textContent = t.lthr_run ?? '—';
+  document.getElementById('lthrBikeVal').textContent = t.lthr_bike ?? '—';
+
+  function zoneRows(zones) {
+    return (zones || []).map(z => `<tr><td>${z.name}</td><td>${z.low}${z.high ? '–' + z.high : '+'}</td></tr>`).join('');
+  }
+  document.getElementById('powerZoneTable').innerHTML = zoneRows(DATA.powerZones);
+  document.getElementById('hrZoneRunTable').innerHTML = zoneRows(DATA.hrZonesRun);
+  document.getElementById('hrZoneBikeTable').innerHTML = zoneRows(DATA.hrZonesBike);
+  document.getElementById('thresholdNote').textContent =
+    `Threshold pace ${Math.floor(t.threshold_pace_min_per_mi)}:${String(Math.round((t.threshold_pace_min_per_mi % 1) * 60)).padStart(2, '0')}/mi · Swim CSS ${Math.floor(t.swim_css_min_per_100y)}:${String(Math.round((t.swim_css_min_per_100y % 1) * 60)).padStart(2, '0')}/100yd · Max HR ${t.max_hr ?? '—'}`;
+})();
+
+// ---- Calories ----
+(function renderCalories() {
+  const last7 = (DATA.garminDaily || []).slice(-7);
+  new Chart(document.getElementById('chartCalories'), {
+    type: 'bar',
+    data: {
+      labels: last7.map(d => fmtWeek(d.date)),
+      datasets: [
+        { label: 'BMR', data: last7.map(d => d.bmrKcal), backgroundColor: '#6b7a8d', stack: 'k' },
+        { label: 'Active', data: last7.map(d => d.activeKcal), backgroundColor: COLORS.bike, stack: 'k' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { color: tickColor(), boxWidth: 10 } } },
+      scales: baseScales({
+        x: { stacked: true, grid: { display: false }, ticks: { color: tickColor() } },
+        y: { stacked: true, grid: { color: gridColor() }, ticks: { color: tickColor() }, title: { display: true, text: 'kcal', color: tickColor() } }
+      })
+    }
+  });
+})();
+</script>
+</body>
+</html>
