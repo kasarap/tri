@@ -66,7 +66,7 @@ RACE_DATE = os.environ.get("RACE_DATE", "2027-05-08")
 OUTPUT_PATH = os.environ.get("OUTPUT_PATH", "./index.html")
 TEMPLATE_PATH = os.environ.get("TEMPLATE_PATH", "./dashboard_template.html")
 
-GARMIN_HISTORY_DAYS = int(os.environ.get("GARMIN_HISTORY_DAYS", "56"))
+GARMIN_HISTORY_DAYS = int(os.environ.get("GARMIN_HISTORY_DAYS", "180"))
 STRAVA_HISTORY_DAYS = int(os.environ.get("STRAVA_HISTORY_DAYS", "180"))
 LOAD_CAP_HOURS = float(os.environ.get("LOAD_CAP_HOURS", "4.0"))  # guard vs. forgotten-stopped-watch entries
 
@@ -613,7 +613,7 @@ def main():
     log("Computing weekly hours by sport...")
     weekly_hours = compute_weekly_hours(activities)
     # keep only the most recent 15 weeks for chart readability
-    weekly_hours = weekly_hours[-15:]
+    weekly_hours = weekly_hours[-26:]
 
     log("Computing CTL/ATL/TSB model and load balance...")
     daily_load = build_daily_load(activities)
