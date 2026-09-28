@@ -112,7 +112,7 @@ def call_mcp_tool(server, tool_name, arguments, request_id=1):
             "method": "tools/call",
             "params": {"name": tool_name, "arguments": arguments},
         },
-        timeout=60,
+        timeout=150,
     )
     resp.raise_for_status()
     payload = resp.json()
