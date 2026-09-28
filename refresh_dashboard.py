@@ -142,26 +142,31 @@ def call_mcp_tool(server, tool_name, arguments, request_id=1):
 # ---------------------------------------------------------------------------
 def fetch_garmin(days):
     end_date = dt.date.today()
-    start_date = end_date - dt.timedelta(days=days)
+    overall_start = end_date - dt.timedelta(days=days)
 
     daily_by_date = {}
-    cursor = None
-    page = 0
+    WINDOW_DAYS = 30  # matches the exact call shape confirmed working directly
+                       # against Arc Relay; server-side cursor pagination was
+                       # found to fail intermittently after a few hops (empty/
+                       # null JSON-RPC response), so this fetches fixed
+                       # date-bounded windows instead and never sends a cursor.
 
-    while True:
+    window_start = overall_start
+    page = 0
+    while window_start <= end_date:
         page += 1
+        window_end = min(window_start + dt.timedelta(days=WINDOW_DAYS - 1), end_date)
         args = {
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat(),
-            "limit": 30,
+            "start_date": window_start.isoformat(),
+            "end_date": window_end.isoformat(),
+            "limit": WINDOW_DAYS,
             "include_training_readiness": True,
             "include_training_status": True,
             "include_body_battery": True,
         }
-        if cursor:
-            args["cursor"] = cursor
 
-        log(f"Garmin (via Arc Relay): fetching health summary page {page}...")
+        log(f"Garmin (via Arc Relay): fetching health summary window {page} "
+            f"({window_start.isoformat()}..{window_end.isoformat()})...")
         data = call_mcp_tool("garmin-connect", "query_health_summary", args)
 
         summaries = data["data"]["summaries"]
@@ -186,11 +191,7 @@ def fetch_garmin(days):
                 "_training_status": s.get("training_status"),
             }
 
-        pagination = data.get("pagination") or {}
-        if pagination.get("has_more") and pagination.get("cursor"):
-            cursor = pagination["cursor"]
-        else:
-            break
+        window_start = window_end + dt.timedelta(days=1)
 
     # VO2max trend: pull from the same per-day training_status blocks,
     # keeping only points where the value actually changed.
