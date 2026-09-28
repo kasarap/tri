@@ -92,36 +92,56 @@ def log(msg):
 # ---------------------------------------------------------------------------
 # Arc Relay MCP client (used for Garmin data)
 # ---------------------------------------------------------------------------
-def call_mcp_tool(server, tool_name, arguments, request_id=1):
+def call_mcp_tool(server, tool_name, arguments, request_id=1, retries=3):
     """Minimal synchronous JSON-RPC client for an Arc-Relay-hosted MCP
     server. Arc Relay's HTTP transport here responds with a single JSON
     object per call (no SSE stream to manage), so this is just a POST.
+
+    Arc Relay has been observed to intermittently return an empty/null
+    body for an otherwise-valid call (not tied to any particular date
+    range - retrying the identical request succeeds), so this retries
+    a few times with a short backoff before giving up.
     """
     if not ARC_RELAY_API_KEY:
         raise RuntimeError("ARC_RELAY_API_KEY is not set")
 
-    resp = requests.post(
-        f"{ARC_RELAY_URL}/mcp/{server}",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {ARC_RELAY_API_KEY}",
-        },
-        json={
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": "tools/call",
-            "params": {"name": tool_name, "arguments": arguments},
-        },
-        timeout=150,
-    )
-    resp.raise_for_status()
-    payload = resp.json()
+    last_err = None
+    for attempt in range(1, retries + 1):
+        try:
+            resp = requests.post(
+                f"{ARC_RELAY_URL}/mcp/{server}",
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {ARC_RELAY_API_KEY}",
+                },
+                json={
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "method": "tools/call",
+                    "params": {"name": tool_name, "arguments": arguments},
+                },
+                timeout=150,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
 
-    if "error" in payload:
-        raise RuntimeError(f"Arc Relay JSON-RPC error calling {tool_name}: {payload['error']}")
+            if payload is None:
+                raise RuntimeError("Arc Relay returned an empty/null response body")
+            if "error" in payload:
+                raise RuntimeError(f"Arc Relay JSON-RPC error calling {tool_name}: {payload['error']}")
 
-    result = payload["result"]
-    text = result["content"][0]["text"]
+            result = payload["result"]
+            text = result["content"][0]["text"]
+            break
+        except Exception as e:
+            last_err = e
+            if attempt < retries:
+                wait = 10 * attempt
+                log(f"  {server}/{tool_name} attempt {attempt} failed ({e}); retrying in {wait}s...")
+                import time
+                time.sleep(wait)
+            else:
+                raise RuntimeError(f"{server}/{tool_name} failed after {retries} attempts: {last_err}") from last_err
 
     if result.get("isError"):
         raise RuntimeError(
@@ -167,7 +187,12 @@ def fetch_garmin(days):
 
         log(f"Garmin (via Arc Relay): fetching health summary window {page} "
             f"({window_start.isoformat()}..{window_end.isoformat()})...")
-        data = call_mcp_tool("garmin-connect", "query_health_summary", args)
+        try:
+            data = call_mcp_tool("garmin-connect", "query_health_summary", args)
+        except Exception as e:
+            log(f"  window {page} failed after retries, skipping it ({e})")
+            window_start = window_end + dt.timedelta(days=1)
+            continue
 
         summaries = data["data"]["summaries"]
         for s in summaries:
