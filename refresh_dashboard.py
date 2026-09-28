@@ -11,10 +11,25 @@ No TrainingPeaks account/API access is used or required — CTL/ATL/TSB
 are modeled locally so this script has no TrainingPeaks dependency at all.
 
 Environment variables (set these in run_refresh.sh or your cron/CI secrets):
-  GARMIN_EMAIL, GARMIN_PASSWORD   - only needed the first time / if the
-                                    cached token expires. If a valid
-                                    ~/.garminconnect token cache already
-                                    exists, these are not required.
+  ARC_RELAY_URL                   - base URL for your Arc Relay instance's
+                                    internal listener, e.g.
+                                    http://127.0.0.1:8103 (requires
+                                    run_refresh.sh's --network host so this
+                                    container can reach that port)
+  ARC_RELAY_API_KEY               - a static API key generated from Arc
+                                    Relay's own "API Keys" admin page.
+                                    Garmin data is pulled through your
+                                    existing Arc-Relay-hosted
+                                    garmin-connect-mcp server over this,
+                                    instead of logging into Garmin
+                                    independently — reuses a session that's
+                                    already been through MFA once, rather
+                                    than re-fighting Garmin's login/MFA/
+                                    rate-limit wall on every run. If that
+                                    session ever logs out, re-run your usual
+                                    garmin-connect-mcp interactive auth flow
+                                    and it starts working again with no
+                                    changes needed here.
   STRAVA_CLIENT_ID
   STRAVA_CLIENT_SECRET
   STRAVA_REFRESH_TOKEN            - a long-lived Strava OAuth refresh token
@@ -34,18 +49,12 @@ import datetime as dt
 
 import requests
 
-try:
-    from garminconnect import Garmin
-except ImportError:
-    Garmin = None
-
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-GARMIN_TOKEN_DIR = os.path.expanduser(os.environ.get("GARMIN_TOKEN_DIR", "~/.garminconnect"))
-GARMIN_EMAIL = os.environ.get("GARMIN_EMAIL")
-GARMIN_PASSWORD = os.environ.get("GARMIN_PASSWORD")
+ARC_RELAY_URL = os.environ.get("ARC_RELAY_URL", "http://127.0.0.1:8103").rstrip("/")
+ARC_RELAY_API_KEY = os.environ.get("ARC_RELAY_API_KEY")
 
 STRAVA_CLIENT_ID = os.environ.get("STRAVA_CLIENT_ID")
 STRAVA_CLIENT_SECRET = os.environ.get("STRAVA_CLIENT_SECRET")
@@ -81,75 +90,122 @@ def log(msg):
 
 
 # ---------------------------------------------------------------------------
-# Garmin
+# Arc Relay MCP client (used for Garmin data)
+# ---------------------------------------------------------------------------
+def call_mcp_tool(server, tool_name, arguments, request_id=1):
+    """Minimal synchronous JSON-RPC client for an Arc-Relay-hosted MCP
+    server. Arc Relay's HTTP transport here responds with a single JSON
+    object per call (no SSE stream to manage), so this is just a POST.
+    """
+    if not ARC_RELAY_API_KEY:
+        raise RuntimeError("ARC_RELAY_API_KEY is not set")
+
+    resp = requests.post(
+        f"{ARC_RELAY_URL}/mcp/{server}",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {ARC_RELAY_API_KEY}",
+        },
+        json={
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": "tools/call",
+            "params": {"name": tool_name, "arguments": arguments},
+        },
+        timeout=60,
+    )
+    resp.raise_for_status()
+    payload = resp.json()
+
+    if "error" in payload:
+        raise RuntimeError(f"Arc Relay JSON-RPC error calling {tool_name}: {payload['error']}")
+
+    result = payload["result"]
+    text = result["content"][0]["text"]
+
+    if result.get("isError"):
+        raise RuntimeError(
+            f"{server}/{tool_name} returned an error: {text}\n"
+            "(If this says something like 'authenticate interactively', the "
+            "Garmin session behind Arc Relay has logged out — run your usual "
+            "garmin-connect-mcp interactive auth flow to fix it; nothing in "
+            "this script needs to change.)"
+        )
+
+    return json.loads(text)
+
+
+# ---------------------------------------------------------------------------
+# Garmin (pulled through Arc Relay's already-authenticated garmin-connect-mcp,
+# not via an independent login — see call_mcp_tool above and the module
+# docstring for why)
 # ---------------------------------------------------------------------------
 def fetch_garmin(days):
-    if Garmin is None:
-        raise RuntimeError("garminconnect package not installed (pip install garminconnect)")
+    end_date = dt.date.today()
+    start_date = end_date - dt.timedelta(days=days)
 
-    client = Garmin()
-    try:
-        client.login(GARMIN_TOKEN_DIR)
-        log("Garmin: logged in via cached token")
-    except Exception as e:
-        if not (GARMIN_EMAIL and GARMIN_PASSWORD):
-            raise RuntimeError(
-                "Garmin cached token missing/expired and GARMIN_EMAIL/GARMIN_PASSWORD "
-                "are not set. Run the login flow once interactively to seed the token cache."
-            ) from e
-        log(f"Garmin: cached token unusable ({e}), logging in fresh")
-        client = Garmin(GARMIN_EMAIL, GARMIN_PASSWORD)
-        client.login()
-        client.garth.dump(GARMIN_TOKEN_DIR)
-        log("Garmin: fresh login succeeded, token cache written")
+    daily_by_date = {}
+    cursor = None
+    page = 0
 
-    today = dt.date.today()
-    daily = []
+    while True:
+        page += 1
+        args = {
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "limit": 30,
+            "include_training_readiness": True,
+            "include_training_status": True,
+            "include_body_battery": True,
+        }
+        if cursor:
+            args["cursor"] = cursor
+
+        log(f"Garmin (via Arc Relay): fetching health summary page {page}...")
+        data = call_mcp_tool("garmin-connect", "query_health_summary", args)
+
+        summaries = data["data"]["summaries"]
+        for s in summaries:
+            ds = s["date"]["date"]
+            us = s.get("user_summary") or {}
+            tr_list = s.get("training_readiness") or []
+            tr = tr_list[-1] if tr_list else {}
+            daily_by_date[ds] = {
+                "date": ds,
+                "restingHR": us.get("restingHeartRate"),
+                "avgStress": us.get("averageStressLevel"),
+                "steps": us.get("totalSteps"),
+                "bbHigh": us.get("bodyBatteryHighestValue"),
+                "bbLow": us.get("bodyBatteryLowestValue"),
+                "totalKcal": us.get("totalKilocalories"),
+                "activeKcal": us.get("activeKilocalories"),
+                "bmrKcal": us.get("bmrKilocalories"),
+                "readiness": tr.get("score"),
+                "sleepScore": tr.get("sleepScore"),
+                "hrvWeekly": tr.get("hrvWeeklyAverage"),
+                "_training_status": s.get("training_status"),
+            }
+
+        pagination = data.get("pagination") or {}
+        if pagination.get("has_more") and pagination.get("cursor"):
+            cursor = pagination["cursor"]
+        else:
+            break
+
+    # VO2max trend: pull from the same per-day training_status blocks,
+    # keeping only points where the value actually changed.
     vo2max = []
     last_vo2 = None
+    for ds in sorted(daily_by_date.keys()):
+        ts = daily_by_date[ds].pop("_training_status", None) or {}
+        vo2 = (ts.get("mostRecentVO2Max") or {}).get("generic") or {}
+        v = vo2.get("vo2MaxPreciseValue") or vo2.get("vo2MaxValue")
+        vdate = vo2.get("calendarDate")
+        if v and vdate and v != last_vo2:
+            vo2max.append({"date": vdate, "value": v})
+            last_vo2 = v
 
-    for i in range(days, -1, -1):
-        d = today - dt.timedelta(days=i)
-        ds = d.isoformat()
-        row = {"date": ds, "restingHR": None, "sleepScore": None, "readiness": None,
-               "hrvWeekly": None, "bbHigh": None, "bbLow": None, "avgStress": None, "steps": None,
-               "totalKcal": None, "activeKcal": None, "bmrKcal": None}
-        try:
-            stats = client.get_stats(ds) or {}
-            row["restingHR"] = stats.get("restingHeartRate")
-            row["avgStress"] = stats.get("averageStressLevel")
-            row["steps"] = stats.get("totalSteps")
-            row["bbHigh"] = stats.get("bodyBatteryHighestValue")
-            row["bbLow"] = stats.get("bodyBatteryLowestValue")
-            row["totalKcal"] = stats.get("totalKilocalories")
-            row["activeKcal"] = stats.get("activeKilocalories")
-            row["bmrKcal"] = stats.get("bmrKilocalories")
-        except Exception as e:
-            log(f"Garmin get_stats({ds}) failed: {e}")
-
-        try:
-            tr = client.get_training_readiness(ds)
-            if isinstance(tr, list) and tr:
-                tr0 = tr[-1]
-                row["readiness"] = tr0.get("score")
-                row["sleepScore"] = tr0.get("sleepScore")
-                row["hrvWeekly"] = tr0.get("hrvWeeklyAverage")
-        except Exception as e:
-            log(f"Garmin get_training_readiness({ds}) failed: {e}")
-
-        try:
-            ts = client.get_training_status(ds) or {}
-            vo2 = (ts.get("mostRecentVO2Max") or {}).get("generic") or {}
-            v = vo2.get("vo2MaxPreciseValue") or vo2.get("vo2MaxValue")
-            vdate = vo2.get("calendarDate")
-            if v and vdate and v != last_vo2:
-                vo2max.append({"date": vdate, "value": v})
-                last_vo2 = v
-        except Exception as e:
-            log(f"Garmin get_training_status({ds}) failed: {e}")
-
-        daily.append(row)
-
+    daily = [daily_by_date[ds] for ds in sorted(daily_by_date.keys())]
     return daily, vo2max
 
 
